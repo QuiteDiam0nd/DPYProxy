@@ -33,7 +33,9 @@ class ConnectionHandler:
                  disabled_modes: list[ProxyMode],
                  forward_proxy: NetworkAddress,
                  forward_proxy_mode: ProxyMode,
-                 forward_proxy_resolve_address: bool):
+                 forward_proxy_resolve_address: bool,
+                 forward_proxy_username: str = None,
+                 forward_proxy_password: str = None):
         self.connection_socket = connection_socket
         self.address = address
         self.proxy_mode = None
@@ -47,6 +49,8 @@ class ConnectionHandler:
         self.forward_proxy = forward_proxy
         self.forward_proxy_mode = forward_proxy_mode
         self.forward_proxy_resolve_address = forward_proxy_resolve_address
+        self.forward_proxy_username = forward_proxy_username
+        self.forward_proxy_password = forward_proxy_password
 
     def handle(self):
         """
@@ -183,14 +187,18 @@ class ConnectionHandler:
         try:
             # send proxy messages if necessary
             if self.forward_proxy_mode == ProxyMode.HTTPS:
-                server_socket.send(Http.connect_message(final_server_address, http_version))
+                proxy_auth_header = None
+                if self.forward_proxy_username is not None and self.forward_proxy_password is not None:
+                    proxy_auth_header = Http.proxy_authorization_basic(self.forward_proxy_username, self.forward_proxy_password)
+                server_socket.send(Http.connect_message_with_auth(final_server_address, http_version, proxy_auth_header))
                 self.debug(f"Sent HTTP CONNECT to forward proxy")
-                # receive HTTP 200 OK
-                answer = server_socket.recv(STANDARD_SOCKET_RECEIVE_SIZE)
-                if not answer.upper().startswith(Http.http_200_ok(http_version)):
-                    raise ParserException(f"Forward proxy rejected the connection with {answer}")
+                # receive HTTP response and check status code
+                version, status_code, reason = Http.read_http_response_status(server_socket)
+                if status_code != 200:
+                    self.warn(f"Forward proxy CONNECT failed: {version} {status_code} {reason}")
+                    raise ParserException(f"Forward proxy rejected the connection with HTTP {status_code}")
 
-            elif self.forward_proxy == ProxyMode.SOCKSv4:
+            elif self.forward_proxy_mode == ProxyMode.SOCKSv4:
                 server_socket.send(Socksv4.socks4_request(final_server_address))
                 self.debug(f"Sent SOCKSv4 to forward proxy")
                 # receive SOCKSv4 OK
@@ -198,7 +206,7 @@ class ConnectionHandler:
                 if not answer.upper().startswith(Socksv4.socks4_ok()) and len(answer) != 8:
                     raise ParserException(f"Forward proxy rejected the connection with {answer}")
 
-            elif self.forward_proxy == ProxyMode.SOCKSv5:
+            elif self.forward_proxy_mode == ProxyMode.SOCKSv5:
                 server_socket.send(Socksv5.socks5_auth_methods())
                 self.debug("Sent SOCKSv5 auth methods")
                 answer = server_socket.recv(2)

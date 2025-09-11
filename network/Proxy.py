@@ -24,7 +24,9 @@ class Proxy:
                  disabled_modes: list[ProxyMode] = None,
                  forward_proxy: NetworkAddress = None,
                  forward_proxy_mode: ProxyMode = ProxyMode.HTTPS,
-                 forward_proxy_resolve_address: bool = False):
+                 forward_proxy_resolve_address: bool = False,
+                 forward_proxy_username: str = None,
+                 forward_proxy_password: str = None):
         # timeout for socket reads and message reception
         self.timeout = timeout
         # own port
@@ -44,6 +46,8 @@ class Proxy:
         self.forward_proxy = forward_proxy
         self.forward_proxy_mode = forward_proxy_mode
         self.forward_proxy_resolve_address = forward_proxy_resolve_address
+        self.forward_proxy_username = forward_proxy_username
+        self.forward_proxy_password = forward_proxy_password
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
@@ -60,7 +64,9 @@ class Proxy:
             self.disabled_modes,
             self.forward_proxy,
             self.forward_proxy_mode,
-            self.forward_proxy_resolve_address
+            self.forward_proxy_resolve_address,
+            self.forward_proxy_username,
+            self.forward_proxy_password
         ).handle()
 
     def start(self):
