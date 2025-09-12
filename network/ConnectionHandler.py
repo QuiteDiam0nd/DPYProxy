@@ -196,7 +196,7 @@ class ConnectionHandler:
                 version, status_code, reason = Http.read_http_response_status(server_socket)
                 if status_code != 200:
                     self.warn(f"Forward proxy CONNECT failed: {version} {status_code} {reason}")
-                    raise ParserException(f"Forward proxy rejected the connection with HTTP {status_code}")
+                    self.debug(f"Forward proxy rejected the connection with HTTP {status_code}")
 
             elif self.forward_proxy_mode == ProxyMode.SOCKSv4:
                 server_socket.send(Socksv4.socks4_request(final_server_address))
