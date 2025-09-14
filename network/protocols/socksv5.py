@@ -17,6 +17,7 @@ class Socksv5:
     UDP_PORT = b'\x03'
     RESERVED_BYTE = b'\x00'
     NO_AUTH = b'\x00'
+    USERPASS = b'\x02'
 
     @staticmethod
     def read_socks5(connection_socket: WrappedSocket) -> tuple[str, int]:
@@ -85,10 +86,34 @@ class Socksv5:
         return SOCKSv5_HEADER + b'\x01' + Socksv5.NO_AUTH
 
     @staticmethod
+    def socks5_auth_methods(username: str = None, password: str = None) -> bytes:
+        """
+        Build methods negotiation message. If username/password are provided, include USERPASS method.
+        Always include NO_AUTH as a fallback.
+        """
+        methods = []
+        if username is not None and password is not None:
+            methods.append(Socksv5.USERPASS)
+        methods.append(Socksv5.NO_AUTH)
+        return SOCKSv5_HEADER + len(methods).to_bytes(1, byteorder='big') + b''.join(methods)
+
+    @staticmethod
+    def socks5_auth_username_password(username: str, password: str) -> bytes:
+        """
+        RFC 1929 username/password authentication sub-negotiation.
+        """
+        username_bytes = username.encode('utf-8') if isinstance(username, str) else username
+        password_bytes = password.encode('utf-8') if isinstance(password, str) else password
+        if len(username_bytes) > 255 or len(password_bytes) > 255:
+            raise ParserException("Username/password too long for SOCKS5 (max 255)")
+        return b'\x01' + len(username_bytes).to_bytes(1, byteorder='big') + username_bytes \
+               + len(password_bytes).to_bytes(1, byteorder='big') + password_bytes
+
+    @staticmethod
     def socks5_request(server_address: NetworkAddress):
         if not is_valid_ipv4_address(server_address.host):
             domain = server_address.host.encode('utf-8')
-            address = b'\x03' + len(domain).to_bytes() + domain
+            address = b'\x03' + len(domain).to_bytes(1, byteorder='big') + domain
         else:
             address = b'\x01' + socket.inet_aton(server_address.host)
         return (SOCKSv5_HEADER + b'\x01' + Socksv5.RESERVED_BYTE + address
