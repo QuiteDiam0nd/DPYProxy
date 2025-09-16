@@ -35,7 +35,8 @@ class ConnectionHandler:
                  forward_proxy_mode: ProxyMode,
                  forward_proxy_resolve_address: bool,
                  forward_proxy_username: str = None,
-                 forward_proxy_password: str = None):
+                 forward_proxy_password: str = None,
+                 forward_proxy_socks5_auth_policy: str = 'auto'):
         self.connection_socket = connection_socket
         self.address = address
         self.proxy_mode = None
@@ -51,6 +52,7 @@ class ConnectionHandler:
         self.forward_proxy_resolve_address = forward_proxy_resolve_address
         self.forward_proxy_username = forward_proxy_username
         self.forward_proxy_password = forward_proxy_password
+        self.forward_proxy_socks5_auth_policy = forward_proxy_socks5_auth_policy
 
     def handle(self):
         """
@@ -207,7 +209,11 @@ class ConnectionHandler:
                     raise ParserException(f"Forward proxy rejected the connection with {answer}")
 
             elif self.forward_proxy_mode == ProxyMode.SOCKSv5:
-                server_socket.send(Socksv5.socks5_auth_methods(self.forward_proxy_username, self.forward_proxy_password))
+                server_socket.send(Socksv5.socks5_auth_methods(
+                    self.forward_proxy_username,
+                    self.forward_proxy_password,
+                    self.forward_proxy_socks5_auth_policy
+                ))
                 self.debug("Sent SOCKSv5 auth methods")
                 answer = server_socket.recv(2)
                 if len(answer) != 2 or answer[0] != 0x05:
@@ -231,7 +237,7 @@ class ConnectionHandler:
                 # receive SOCKSv5 OK
                 answer = server_socket.recv(STANDARD_SOCKET_RECEIVE_SIZE)
                 if len(answer) < 2 or answer[0] != 0x05 or answer[1] != 0x00:
-                    self.debug(f"Forward proxy rejected the SOCKSv5 CONNECT with {answer}")
+                    raise ParserException(f"Forward proxy rejected the SOCKSv5 CONNECT with {answer}")
         except:
             self.debug("Could not send proxy message")
             self.connection_socket.try_close()

@@ -82,19 +82,25 @@ class Socksv5:
         return host
 
     @staticmethod
-    def socks5_auth_methods() -> bytes:
-        return SOCKSv5_HEADER + b'\x01' + Socksv5.NO_AUTH
-
-    @staticmethod
-    def socks5_auth_methods(username: str = None, password: str = None) -> bytes:
-        """
-        Build methods negotiation message. If username/password are provided, include USERPASS method.
-        Always include NO_AUTH as a fallback.
-        """
+    def socks5_auth_methods(username: str = None, password: str = None, auth_policy: str = 'auto') -> bytes:
+        policy = (auth_policy or 'auto').lower()
         methods = []
-        if username is not None and password is not None:
-            methods.append(Socksv5.USERPASS)
-        methods.append(Socksv5.NO_AUTH)
+        has_creds = username is not None and password is not None
+
+        if policy == 'no_auth':
+            methods = [Socksv5.NO_AUTH]
+        elif policy == 'userpass':
+            if not has_creds:
+                raise ParserException("SOCKSv5 userpass policy selected but username/password not provided")
+            methods = [Socksv5.USERPASS]
+        elif policy == 'auto':
+            if has_creds:
+                methods = [Socksv5.USERPASS, Socksv5.NO_AUTH]
+            else:
+                methods = [Socksv5.NO_AUTH]
+        else:
+            raise ParserException(f"Unknown SOCKSv5 auth policy: {auth_policy}")
+
         return SOCKSv5_HEADER + len(methods).to_bytes(1, byteorder='big') + b''.join(methods)
 
     @staticmethod
@@ -102,8 +108,8 @@ class Socksv5:
         """
         RFC 1929 username/password authentication sub-negotiation.
         """
-        username_bytes = username.encode('utf-8') if isinstance(username, str) else username
-        password_bytes = password.encode('utf-8') if isinstance(password, str) else password
+        username_bytes = username.encode('utf-8')
+        password_bytes = password.encode('utf-8')
         if len(username_bytes) > 255 or len(password_bytes) > 255:
             raise ParserException("Username/password too long for SOCKS5 (max 255)")
         return b'\x01' + len(username_bytes).to_bytes(1, byteorder='big') + username_bytes \
