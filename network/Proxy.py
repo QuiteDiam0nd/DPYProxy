@@ -26,7 +26,8 @@ class Proxy:
                  forward_proxy_mode: ProxyMode = ProxyMode.HTTPS,
                  forward_proxy_resolve_address: bool = False,
                  forward_proxy_username: str = None,
-                 forward_proxy_password: str = None):
+                 forward_proxy_password: str = None,
+                 forward_proxy_socks5_auth_policy: str = 'auto'):
         # timeout for socket reads and message reception
         self.timeout = timeout
         # own port
@@ -48,6 +49,7 @@ class Proxy:
         self.forward_proxy_resolve_address = forward_proxy_resolve_address
         self.forward_proxy_username = forward_proxy_username
         self.forward_proxy_password = forward_proxy_password
+        self.forward_proxy_socks5_auth_policy = forward_proxy_socks5_auth_policy
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
@@ -66,7 +68,8 @@ class Proxy:
             self.forward_proxy_mode,
             self.forward_proxy_resolve_address,
             self.forward_proxy_username,
-            self.forward_proxy_password
+            self.forward_proxy_password,
+            self.forward_proxy_socks5_auth_policy
         ).handle()
 
     def start(self):

@@ -35,7 +35,8 @@ class ConnectionHandler:
                  forward_proxy_mode: ProxyMode,
                  forward_proxy_resolve_address: bool,
                  forward_proxy_username: str = None,
-                 forward_proxy_password: str = None):
+                 forward_proxy_password: str = None,
+                 forward_proxy_socks5_auth_policy: str = 'auto'):
         self.connection_socket = connection_socket
         self.address = address
         self.proxy_mode = None
@@ -51,6 +52,7 @@ class ConnectionHandler:
         self.forward_proxy_resolve_address = forward_proxy_resolve_address
         self.forward_proxy_username = forward_proxy_username
         self.forward_proxy_password = forward_proxy_password
+        self.forward_proxy_socks5_auth_policy = forward_proxy_socks5_auth_policy
 
     def handle(self):
         """
@@ -207,19 +209,35 @@ class ConnectionHandler:
                     raise ParserException(f"Forward proxy rejected the connection with {answer}")
 
             elif self.forward_proxy_mode == ProxyMode.SOCKSv5:
-                server_socket.send(Socksv5.socks5_auth_methods())
+                server_socket.send(Socksv5.socks5_auth_methods(
+                    self.forward_proxy_username,
+                    self.forward_proxy_password,
+                    self.forward_proxy_socks5_auth_policy
+                ))
                 self.debug("Sent SOCKSv5 auth methods")
                 answer = server_socket.recv(2)
-                if answer == b'\x05\xFF':
-                    raise ParserException("Forward proxy does not support no auth")
-                if answer != b'\x05\x00':
-                    raise ParserException(f"Forward proxy rejected the connection with {answer}")
+                if len(answer) != 2 or answer[0] != 0x05:
+                    raise ParserException(f"Invalid SOCKSv5 method selection response: {answer}")
+                method = answer[1:2]
+                if method == b'\xFF':
+                    raise ParserException("Forward proxy did not accept any auth method")
+                if method == Socksv5.USERPASS:
+                    if self.forward_proxy_username is None or self.forward_proxy_password is None:
+                        raise ParserException("Forward proxy requires username/password but none provided")
+                    server_socket.send(Socksv5.socks5_auth_username_password(self.forward_proxy_username, self.forward_proxy_password))
+                    auth_answer = server_socket.recv(2)
+                    if len(auth_answer) != 2 or auth_answer[0] != 0x01 or auth_answer[1] != 0x00:
+                        raise ParserException(f"SOCKSv5 username/password authentication failed: {auth_answer}")
+                elif method == Socksv5.NO_AUTH:
+                    pass
+                else:
+                    raise ParserException(f"Unsupported SOCKSv5 method selected by server: {method}")
                 server_socket.send(Socksv5.socks5_request(final_server_address))
                 self.debug(f"Sent SOCKSv5 to forward proxy")
                 # receive SOCKSv5 OK
                 answer = server_socket.recv(STANDARD_SOCKET_RECEIVE_SIZE)
-                if not answer.upper().startswith(Socksv5.socks5_ok(server_socket)):
-                    self.debug(f"Forward proxy rejected the connection with {answer}")
+                if len(answer) < 2 or answer[0] != 0x05 or answer[1] != 0x00:
+                    raise ParserException(f"Forward proxy rejected the SOCKSv5 CONNECT with {answer}")
         except:
             self.debug("Could not send proxy message")
             self.connection_socket.try_close()

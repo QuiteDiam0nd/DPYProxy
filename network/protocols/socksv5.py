@@ -17,6 +17,7 @@ class Socksv5:
     UDP_PORT = b'\x03'
     RESERVED_BYTE = b'\x00'
     NO_AUTH = b'\x00'
+    USERPASS = b'\x02'
 
     @staticmethod
     def read_socks5(connection_socket: WrappedSocket) -> tuple[str, int]:
@@ -81,14 +82,44 @@ class Socksv5:
         return host
 
     @staticmethod
-    def socks5_auth_methods() -> bytes:
-        return SOCKSv5_HEADER + b'\x01' + Socksv5.NO_AUTH
+    def socks5_auth_methods(username: str = None, password: str = None, auth_policy: str = 'auto') -> bytes:
+        policy = (auth_policy or 'auto').lower()
+        methods = []
+        has_creds = username is not None and password is not None
+
+        if policy == 'no_auth':
+            methods = [Socksv5.NO_AUTH]
+        elif policy == 'userpass':
+            if not has_creds:
+                raise ParserException("SOCKSv5 userpass policy selected but username/password not provided")
+            methods = [Socksv5.USERPASS]
+        elif policy == 'auto':
+            if has_creds:
+                methods = [Socksv5.USERPASS, Socksv5.NO_AUTH]
+            else:
+                methods = [Socksv5.NO_AUTH]
+        else:
+            raise ParserException(f"Unknown SOCKSv5 auth policy: {auth_policy}")
+
+        return SOCKSv5_HEADER + len(methods).to_bytes(1, byteorder='big') + b''.join(methods)
+
+    @staticmethod
+    def socks5_auth_username_password(username: str, password: str) -> bytes:
+        """
+        RFC 1929 username/password authentication sub-negotiation.
+        """
+        username_bytes = username.encode('utf-8')
+        password_bytes = password.encode('utf-8')
+        if len(username_bytes) > 255 or len(password_bytes) > 255:
+            raise ParserException("Username/password too long for SOCKS5 (max 255)")
+        return b'\x01' + len(username_bytes).to_bytes(1, byteorder='big') + username_bytes \
+               + len(password_bytes).to_bytes(1, byteorder='big') + password_bytes
 
     @staticmethod
     def socks5_request(server_address: NetworkAddress):
         if not is_valid_ipv4_address(server_address.host):
             domain = server_address.host.encode('utf-8')
-            address = b'\x03' + len(domain).to_bytes() + domain
+            address = b'\x03' + len(domain).to_bytes(1, byteorder='big') + domain
         else:
             address = b'\x01' + socket.inet_aton(server_address.host)
         return (SOCKSv5_HEADER + b'\x01' + Socksv5.RESERVED_BYTE + address

@@ -109,11 +109,16 @@ def initialize_parser():
 
     forward_proxy.add_argument('--forward_proxy_username', type=str,
                                default=None,
-                               help='Username for the forward HTTP proxy authentication (Basic)')
+                               help='Username for the forward proxy authentication (HTTP Basic / SOCKS5)')
 
     forward_proxy.add_argument('--forward_proxy_password', type=str,
                                default=None,
-                               help='Password for the forward HTTP proxy authentication (Basic)')
+                               help='Password for the forward proxy authentication (HTTP Basic / SOCKS5)')
+
+    forward_proxy.add_argument('--forward_proxy_socks5_auth', type=str,
+                               choices=['auto', 'no_auth', 'userpass'],
+                               default='auto',
+                               help="SOCKS5 auth policy when using forward proxy: 'auto', 'no_auth', or 'userpass'")
 
     return parser.parse_args()
 
@@ -141,7 +146,8 @@ def main():
 
     proxy = Proxy(server_address, args.timeout, args.record_header_version, args.record_frag, args.tcp_frag,
                   args.frag_size, args.dot_resolver, args.disabled_modes, forward_proxy, args.forward_proxy_mode,
-                  args.forward_proxy_resolve_address, args.forward_proxy_username, args.forward_proxy_password)
+                  args.forward_proxy_resolve_address, args.forward_proxy_username, args.forward_proxy_password,
+                  args.forward_proxy_socks5_auth)
     proxy.start()
 
 
